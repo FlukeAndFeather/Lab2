@@ -1,21 +1,23 @@
 #include <Arduino.h>
-#include <AccelStepper.h>
 
 /*---------------Constants----------------------------------*/
 #define INPUT_PIN 23
-#define STEP_PIN 22
+#define SPD_PIN 22
 #define DIR_PIN 20
 
-#define MAX_SPD 1000
+#define MAX_SPD 255
+#define MAX_POT 1023
 
 /*---------------Module Function Prototypes-----------------*/
+u_int16_t testPotentiometer(void);
+bool testKeyboard(void);
+void changeSpeed(uint16_t newSpeed);
+void toggleDir(void);
 void flushSerial(void);
 
 /*---------------Module Variables---------------------------*/
-AccelStepper stepper(1, STEP_PIN, DIR_PIN);
-static uint16_t lastPot;
-static int16_t currSpd;
-static bool currDir = true;
+static uint16_t currPot = MAX_POT / 2;
+static bool currDir = false;
 
 /*---------------Teensy Main Functions----------------------*/
 void setup() {
@@ -26,35 +28,55 @@ void setup() {
   // Read input from pin 23
   pinMode(INPUT_PIN, INPUT);
 
-  // STEP and DIR on pins 22 and 21
-  pinMode(STEP_PIN, OUTPUT);
+  // SPD and DIR on pins 22 and 20
+  pinMode(SPD_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
 
-  // Set up motor
-  stepper.setMaxSpeed(MAX_SPD);
+  // Start the motor
+  changeSpeed(currPot);
+  toggleDir();
 }
 
 void loop() {
-  // Update speed if potentiometer changes
-  uint16_t newPot = analogRead(INPUT_PIN);
-  if (newPot != lastPot) {
-    currSpd = map(newPot, 0, 1023, 0, MAX_SPD);
-    if (!currDir) currSpd = currSpd * -1;
-    stepper.setSpeed(currSpd);
-    lastPot = newPot;
+  // Read input
+  uint16_t newPot = testPotentiometer();
+  bool newKey = testKeyboard();
+
+  // Respond to potentiometer
+  if (newPot) {
+    changeSpeed(newPot);
   }
 
-  // Update direction if keyboard pressed
-  if (Serial.available()) {
-    char input = Serial.read();
-    currDir = !currDir;
-    flushSerial();
+  // Respond to keyboard
+  if (newKey) {
+    toggleDir();
   }
-
-  stepper.runSpeed();
 }
 
 /*----------------Module Functions--------------------------*/
+u_int16_t testPotentiometer(void) {
+  u_int16_t result = analogRead(INPUT_PIN);
+  return result != currPot ? result : 0;
+}
+
+bool testKeyboard(void) {
+  bool result = false;
+  if (Serial.available()) {
+    result = true;
+    flushSerial();
+  }
+  return result;
+}
+
+void changeSpeed(uint16_t newPot) {
+  analogWrite(SPD_PIN, map(newPot, 0, MAX_POT, 0, MAX_SPD));
+}
+
+void toggleDir(void) {
+  currDir = !currDir;
+  digitalWrite(DIR_PIN, currDir);
+}
+
 void flushSerial(void) {
   while(Serial.available()) {
     char downthedrain = Serial.read();
